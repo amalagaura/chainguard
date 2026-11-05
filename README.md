@@ -1,10 +1,10 @@
 # Chainguard Custom Assembly
 
-Terraform syncs the Custom Assembly YAML files in `assemblies/` into a Chainguard organization. Each directory becomes a folder. Each file becomes an image repo in that folder, synced from a catalog image, with the YAML bound to that repo as a Custom Assembly overlay.
+Terraform syncs the Custom Assembly YAML files in `assemblies/` into a Chainguard organization. Each directory becomes a Chainguard folder. Each file becomes an image repo in that folder, synced from a catalog image, with the YAML bound to that repo as a Custom Assembly overlay.
 
-The YAML files stay the source of truth. Terraform reads them. It does not contain a copy of the manifests.
+Terraform uses the YAML files as the source of truth.
 
-This root module is generic. A laptop on the Chainguard starter plan authenticates with a `chainctl` token. An offline Terraform Enterprise workspace authenticates with its workload-identity token and an assumable identity. No organization id, token, or identity id is committed.
+This root module is generic.  No organization id, token, or identity id is committed. That information is supplied externally.
 
 ## Mapping
 
@@ -23,7 +23,7 @@ assemblies/<folder>/<name>.yaml
 | `overlay` | Custom Assembly manifest. When omitted, the rest of the file is the manifest | `chainguard_image_overlay.config` |
 | `<folder>--<repo>` | Overlay name. Overlays belong to the organization, so the folder is part of the name | `chainguard_image_overlay.assembly` |
 
-Folder names and repo names use Chainguard's name rules: lowercase letters, digits, and hyphens. One directory is enough. Add another directory when a second folder is needed. Two files in one directory must not resolve to the same repo name.
+Folder names and repo names use Chainguard's name rules: lowercase letters, digits, and hyphens. Two files in one directory must not resolve to the same repo name.
 
 The pull reference printed by Terraform is `cgr.dev/<organization>/<repo>`. The folder is the IAM parent of the repo. Confirm the reference with `chainctl images repos list` after the first apply.
 
