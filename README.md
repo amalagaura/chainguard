@@ -43,7 +43,7 @@ environment:
 
 ### source, description, and tags
 
-Set `source`, `description`, and `tags` in the YAML file. The filename stays the repo name. Terraform does not send these three keys to Chainguard. `assemblies/custom-assembly/busybox-tools.yaml` sets them: the repo name is `busybox-tools`, the catalog image is `busybox`, and the overlay applies to the `latest` tag.
+Set `source`, `description`, and `tags` in the YAML file. The filename is the repo name.
 
 ```yaml
 source: busybox
