@@ -3,7 +3,7 @@ locals {
 
   # assemblies/<folder>/<file>.yaml
   # <folder> is the Chainguard folder created under the organization.
-  # <file> is the image repo name, unless the document sets repo.
+  # <file> is the image repo name.
   assembly_files = setunion(
     fileset(local.assembly_root, "*/*.yaml"),
     fileset(local.assembly_root, "*/*.yml"),

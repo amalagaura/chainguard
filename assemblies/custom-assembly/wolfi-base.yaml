@@ -1,4 +1,4 @@
-# Shorthand manifest. The filename is the catalog source and the repo name.
+# Shorthand manifest. The filename is the repo name and the catalog image.
 # The directory name is the Chainguard folder.
 contents:
   packages:
