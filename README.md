@@ -1,10 +1,10 @@
 # Chainguard Custom Assembly
 
-Terraform syncs the Custom Assembly YAML files in `assemblies/` into a Chainguard organization. Each directory becomes a folder. Each file becomes an image repo in that folder, synced from a catalog image, with the YAML bound to that repo as a Custom Assembly overlay.
+Terraform syncs the Custom Assembly YAML files in `assemblies/` into a Chainguard organization. Each directory becomes a Chainguard folder. Each file becomes an image repo in that folder, synced from a catalog image, with the YAML bound to that repo as a Custom Assembly overlay.
 
-The YAML files stay the source of truth. Terraform reads them. It does not contain a copy of the manifests.
+Terraform uses the YAML files as the source of truth.
 
-This root module is generic. A laptop on the Chainguard starter plan authenticates with a `chainctl` token. An offline Terraform Enterprise workspace authenticates with its workload-identity token and an assumable identity. No organization id, token, or identity id is committed.
+This root module is generic.  No organization id, token, or identity id is committed. That information is supplied externally.
 
 ## Mapping
 
