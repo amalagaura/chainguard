@@ -12,7 +12,7 @@ locals {
   doc  = jsondecode(var.raw_json)
   name = trimsuffix(trimsuffix(basename(var.filename), ".yaml"), ".yml")
 
-  meta_keys = toset(["source", "repo", "tags", "description", "overlay"])
+  meta_keys = toset(["source", "tags", "description", "overlay"])
 
   # Both branches are strings. A conditional cannot return two object types.
   body_json = contains(keys(local.doc), "overlay") ? jsonencode(local.doc.overlay) : jsonencode({
@@ -56,15 +56,15 @@ locals {
 }
 
 output "repo" {
-  value = try(local.doc.repo, local.name)
+  value = local.name
 }
 
 output "source" {
-  value = try(local.doc.source, try(local.doc.repo, local.name))
+  value = try(local.doc.source, local.name)
 }
 
 output "description" {
-  value = try(local.doc.description, "Custom assembly of ${try(local.doc.source, try(local.doc.repo, local.name))}.")
+  value = try(local.doc.description, "Custom assembly of ${try(local.doc.source, local.name)}.")
 }
 
 output "selector_kind" {
@@ -93,4 +93,15 @@ output "selector_tags" {
 
 output "overlay_json" {
   value = jsonencode(local.manifest)
+}
+
+resource "terraform_data" "repo_name" {
+  input = local.name
+
+  lifecycle {
+    precondition {
+      condition     = !contains(keys(local.doc), "repo") && !contains(try(keys(local.body), []), "repo")
+      error_message = "Remove repo from ${var.filename}. The filename is the image repo name."
+    }
+  }
 }

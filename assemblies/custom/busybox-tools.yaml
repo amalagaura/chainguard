@@ -1,7 +1,6 @@
-# The repo name differs from the catalog image, and the overlay applies to
-# one tag. Drop source, repo, tags, and description to use the shorthand.
+# The filename is the repo name. source is the catalog image. tags selects
+# one tag. Omit source, description, and tags to use the shorthand.
 source: busybox
-repo: busybox-tools
 description: Busybox with curl, built from the busybox catalog image.
 tags:
   kind: exact
