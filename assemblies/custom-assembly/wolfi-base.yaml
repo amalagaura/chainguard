@@ -1,0 +1,10 @@
+# Shorthand manifest. The filename is the catalog source and the repo name.
+# The directory name is the Chainguard folder.
+contents:
+  packages:
+    - curl
+    - jq
+environment:
+  APP_ENV: production
+annotations:
+  com.example/team: platform

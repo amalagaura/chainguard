@@ -1,0 +1,6 @@
+# Copy to terraform.tfvars for a local plan. terraform.tfvars is gitignored.
+organization = "example.com"
+
+# Leave both unset when chainctl auth login has already cached a token.
+# chainguard_identity_id    = "org-uid/identity-uid"
+# chainguard_identity_token = "/path/to/oidc-token"
