@@ -15,19 +15,18 @@ assemblies/<folder>/<name>.yaml
 | Path or key | Chainguard object | Terraform address |
 | --- | --- | --- |
 | `<folder>/` | Folder under the organization | `chainguard_group.folder["<folder>"]` |
-| `<name>.yaml` | Image repo name, when `repo` is omitted | `chainguard_image_repo.assembly["<folder>/<name>.yaml"]` |
-| `source` | Catalog image to sync. Defaults to `repo`, then to `<name>` | `sync_config.source` |
-| `repo` | Image repo name, when it should differ from the filename | `chainguard_image_repo.assembly` |
-| `description` | Repo description. Defaults to a one-line note | `description` |
-| `tags` | Which tags receive the overlay. Defaults to every tag | `chainguard_image_overlay_binding` |
+| `<name>.yaml` | Image repo name | `chainguard_image_repo.assembly["<folder>/<name>.yaml"]` |
+| `source` | Catalog image to sync. Set it in the file. Defaults to `<name>` | `sync_config.source` |
+| `description` | Repo description. Set it in the file. Defaults to a one-line note | `description` |
+| `tags` | Which tags receive the overlay. Set it in the file. Defaults to every tag | `chainguard_image_overlay_binding` |
 | `overlay` | Custom Assembly manifest. When omitted, the rest of the file is the manifest | `chainguard_image_overlay.config` |
-| `<folder>--<repo>` | Overlay name. Overlays belong to the organization, so the folder is part of the name | `chainguard_image_overlay.assembly` |
+| `<folder>--<name>` | Overlay name. Overlays belong to the organization, so the folder is part of the name | `chainguard_image_overlay.assembly` |
 
-Folder names and repo names use Chainguard's name rules: lowercase letters, digits, and hyphens. One directory is enough. Add another directory when a second folder is needed. Two files in one directory must not resolve to the same repo name.
+The filename, without `.yaml` or `.yml`, is the repo name. Folder names and repo names use Chainguard's name rules: lowercase letters, digits, and hyphens. One directory is enough. Add another directory when a second folder is needed. `name.yaml` and `name.yml` in the same directory name the same repo, and the plan fails.
 
-The pull reference printed by Terraform is `cgr.dev/<organization>/<repo>`. The folder is the IAM parent of the repo. Confirm the reference with `chainctl images repos list` after the first apply.
+The pull reference printed by Terraform is `cgr.dev/<organization>/<name>`. The folder is the IAM parent of the repo. Confirm the reference with `chainctl images repos list` after the first apply.
 
-Renaming a file, or changing `repo`, replaces the Terraform resource. Chainguard image repos cannot be deleted through Terraform. Remove a file only after deleting the repo with `chainctl` and dropping it from state. See [Removing an assembly](#removing-an-assembly).
+Renaming a file replaces the Terraform resource. Chainguard image repos cannot be deleted through Terraform. Remove a file only after deleting the repo with `chainctl` and dropping it from state. See [Removing an assembly](#removing-an-assembly).
 
 ### Shorthand
 
@@ -42,13 +41,12 @@ environment:
   APP_ENV: production
 ```
 
-### Explicit metadata
+### source, description, and tags
 
-Use the reserved keys when the repo name, catalog image, or tag selector differ. Those keys are not sent to Chainguard. `assemblies/custom-assembly/busybox-tools.yaml` is the example: catalog image `busybox`, repo `busybox-tools`, tag `latest`.
+Set `source`, `description`, and `tags` in the YAML file. The filename stays the repo name. Terraform does not send these three keys to Chainguard. `assemblies/custom-assembly/busybox-tools.yaml` sets them: the repo name is `busybox-tools`, the catalog image is `busybox`, and the overlay applies to the `latest` tag.
 
 ```yaml
 source: busybox
-repo: busybox-tools
 description: Busybox with curl, built from the busybox catalog image.
 tags:
   kind: exact
@@ -75,7 +73,7 @@ Terraform rewrites two `chainctl` spellings before it sends the manifest:
 
 A single `truststore` object is wrapped in a list. Any other unknown field fails the plan. The provider rejects it rather than dropping it.
 
-Do not put `source`, `repo`, `tags`, or `description` inside `overlay`.
+Do not put `source`, `tags`, or `description` inside `overlay`. A `repo` key anywhere in the file fails the plan, because the filename is the repo name.
 
 ## What an apply creates
 
