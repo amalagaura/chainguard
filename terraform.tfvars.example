@@ -4,3 +4,7 @@ organization = "example.com"
 # Leave both unset when chainctl auth login has already cached a token.
 # chainguard_identity_id    = "org-uid/identity-uid"
 # chainguard_identity_token = "/path/to/oidc-token"
+
+# Static access token for examples/tfe-static-token-hook.sh. Not an OIDC token.
+# Prefer the CHAINGUARD_TOKEN environment variable. Do not commit a token.
+# chainguard_token = "eyJ..."

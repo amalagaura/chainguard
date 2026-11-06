@@ -9,3 +9,10 @@ provider "chainguard" {
     identity_token = var.chainguard_identity_token
   }
 }
+
+check "chainguard_static_token" {
+  assert {
+    condition     = var.chainguard_token == null || (var.chainguard_identity_id == null && var.chainguard_identity_token == null)
+    error_message = "chainguard_token is a Chainguard access token. Leave chainguard_identity_id and chainguard_identity_token unset, and point the agent hooks at examples/tfe-static-token-hook.sh."
+  }
+}

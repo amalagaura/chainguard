@@ -171,6 +171,27 @@ An air-gapped Terraform Enterprise installation needs `chainguard-dev/chainguard
 
 `login_options.disabled` stays unset. The provider skips the token exchange when automatic login is disabled, so a Terraform Enterprise run would fail before it could use the workload token.
 
+### Terraform Enterprise static token
+
+Use if OIDC is not available.
+
+On the workspace, set one sensitive environment variable:
+
+| Environment variable | Value |
+| --- | --- |
+| `CHAINGUARD_TOKEN` | Output of `chainctl auth token` |
+
+A Terraform variable named `chainguard_token` is equivalent. The hook reads `CHAINGUARD_TOKEN` first, then `TF_VAR_chainguard_token`. Vault can supply either one. Also set the Terraform variable `organization`.
+
+Leave the OIDC variables unset: `TFC_WORKLOAD_IDENTITY_AUDIENCE`, `CHAINGUARD_IDENTITY_ID`, `TF_CHAINGUARD_IDENTITY`, and `TF_CHAINGUARD_IDENTITY_TOKEN`. Leave `chainguard_identity_id` and `chainguard_identity_token` unset.
+
+Set both agent hooks to `examples/tfe-static-token-hook.sh`:
+
+* `TFC_AGENT_HOOK_PRE_PLAN`
+* `TFC_AGENT_HOOK_PRE_APPLY`
+
+Do not point those hooks at `examples/tfe-agent-hook.sh` at the same time. The access token expires. Replace the Vault value before it expires. When the token is no longer valid, the provider tries a browser login and the run fails. Remove this hook when the OIDC route is ready.
+
 ## Local plan without applying
 
 `terraform validate` checks the configuration. `terraform plan` contacts Chainguard, which requires the organization name and a token. The example manifests use `wolfi-base` and `busybox`. The organization must be entitled to those catalog images, and Custom Assembly overlays must be enabled. A starter organization may not have overlays. The corporate organization is the one this module is written for.
