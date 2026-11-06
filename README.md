@@ -22,7 +22,7 @@ assemblies/<folder>/<name>.yaml
 | `overlay` | Custom Assembly manifest. When omitted, the rest of the file is the manifest | `chainguard_image_overlay.config` |
 | `<folder>--<name>` | Overlay name. Overlays belong to the organization, so the folder is part of the name | `chainguard_image_overlay.assembly["<folder>/<name>"]` |
 
-The filename, without `.yaml` or `.yml`, is the repo name. Folder names and repo names use Chainguard's name rules: lowercase letters, digits, and hyphens. One directory is enough. Add another directory when a second folder is needed. The Terraform key for the repo, overlay, and binding is `<folder>/<name>`, with no extension. `name.yaml` and `name.yml` in the same directory are that same key, and the plan fails.
+The filename, without `.yaml` or `.yml`, is the repo name. Folder names and repo names use Chainguard's name rules: lowercase letters, digits, and hyphens.  The Terraform key for the repo, overlay, and binding is `<folder>/<name>`, with no extension. `name.yaml` and `name.yml` in the same directory are that same key, and the plan fails.
 
 The pull reference printed by Terraform is `cgr.dev/<organization>/<name>`. The folder is the IAM parent of the repo. Confirm the reference with `chainctl images repos list` after the first apply.
 
