@@ -9,7 +9,7 @@ output "folders" {
 }
 
 output "assemblies" {
-  description = "Assembly file to the repo Chainguard syncs and the overlay bound to it."
+  description = "Assembly key to the repo Chainguard syncs and the overlay bound to it. folder is null when the repo is created directly in the organization."
   value = {
     for id, assembly in local.assemblies : id => {
       folder     = assembly.folder

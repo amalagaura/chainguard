@@ -1,11 +1,13 @@
 locals {
   assembly_root = "${path.module}/assemblies"
 
-  # assemblies/<folder>/<name>.yaml or <folder>/<name>.yml
-  # <folder> is the Chainguard folder created under the organization.
-  # <name> is the image repo name. The Terraform key is <folder>/<name>,
-  # so the extension is not part of the address.
+  # assemblies/<name>.yaml is a repo in the organization, with no folder.
+  # assemblies/<folder>/<name>.yaml is a repo in that folder.
+  # .yml is accepted as well. The Terraform key has no extension:
+  # <name>, or <folder>/<name>.
   assembly_files = setunion(
+    fileset(local.assembly_root, "*.yaml"),
+    fileset(local.assembly_root, "*.yml"),
     fileset(local.assembly_root, "*/*.yaml"),
     fileset(local.assembly_root, "*/*.yml"),
   )
@@ -13,7 +15,11 @@ locals {
   # Same stem rule as modules/assembly. .yaml and .yml for one name share an id.
   assembly_ids = {
     for file in local.assembly_files :
-    file => "${dirname(file)}/${trimsuffix(trimsuffix(basename(file), ".yaml"), ".yml")}"
+    file => (
+      dirname(file) == "." ?
+      trimsuffix(trimsuffix(basename(file), ".yaml"), ".yml") :
+      "${dirname(file)}/${trimsuffix(trimsuffix(basename(file), ".yaml"), ".yml")}"
+    )
   }
 
   assembly_files_by_id = {
@@ -50,7 +56,7 @@ locals {
     for id, assembly in module.assembly :
     id => {
       file             = local.assembly_file[id]
-      folder           = dirname(local.assembly_file[id])
+      folder           = dirname(local.assembly_file[id]) == "." ? null : dirname(local.assembly_file[id])
       repo             = assembly.repo
       source           = assembly.source
       description      = assembly.description
@@ -61,7 +67,10 @@ locals {
     }
   }
 
-  assembly_folders = toset([for assembly in local.assemblies : assembly.folder])
+  assembly_folders = toset([
+    for assembly in local.assemblies : assembly.folder
+    if assembly.folder != null
+  ])
 }
 
 resource "terraform_data" "assembly_id" {
@@ -72,7 +81,7 @@ resource "terraform_data" "assembly_id" {
   lifecycle {
     precondition {
       condition     = length(each.value) == 1
-      error_message = "More than one file in assemblies/${dirname(each.key)} creates the repo ${basename(each.key)}: ${join(", ", formatlist("assemblies/%s", each.value))}."
+      error_message = "More than one file in ${dirname(each.key) == "." ? "assemblies" : "assemblies/${dirname(each.key)}"} creates the repo ${basename(each.key)}: ${join(", ", formatlist("assemblies/%s", each.value))}."
     }
   }
 }
@@ -84,8 +93,12 @@ resource "terraform_data" "assembly_check" {
 
   lifecycle {
     precondition {
-      condition     = each.value.repo == basename(each.key) && each.value.folder == dirname(each.key)
-      error_message = "assemblies/${each.value.file} resolved to repo ${each.value.repo} in folder ${each.value.folder}, which does not match Terraform key ${each.key}."
+      condition = (
+        each.value.folder == null ?
+        each.key == each.value.repo :
+        each.key == "${each.value.folder}/${each.value.repo}"
+      )
+      error_message = "assemblies/${each.value.file} resolved to repo ${each.value.repo} under ${each.value.folder == null ? "the organization" : "folder ${each.value.folder}"}, which does not match Terraform key ${each.key}."
     }
 
     precondition {

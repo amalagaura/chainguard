@@ -1,6 +1,6 @@
 variable "filename" {
   type        = string
-  description = "Path of the assembly file relative to assemblies/, such as custom-assembly/wolfi-base.yaml."
+  description = "Path of the assembly file relative to assemblies/, such as wolfi-base.yaml or custom/wolfi-base.yaml."
 }
 
 variable "raw_json" {
