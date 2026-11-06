@@ -8,3 +8,9 @@ organization = "example.com"
 # Static access token for examples/tfe-static-token-hook.sh. Not an OIDC token.
 # Prefer the CHAINGUARD_TOKEN environment variable. Do not commit a token.
 # chainguard_token = "eyJ..."
+
+# Runtime Vault read during plan and apply. Leave the secret unset for a local
+# chainctl login. The value is the KV v2 path inside the mount, not the token.
+# chainguard_vault_mount  = "secret"
+# chainguard_vault_secret = "tfe/chainguard"
+# chainguard_vault_key    = "chainguard_token"

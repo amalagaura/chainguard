@@ -167,7 +167,7 @@ Set the Terraform variable `organization` on the workspace. Leave the identity v
 
 A VCS-driven workspace does not need a backend block. For CLI-driven runs against Terraform Enterprise, add a `backend "remote"` block locally and pass the hostname, organization, and workspace with `-backend-config`. Do not commit that block with a real hostname.
 
-An air-gapped Terraform Enterprise installation needs `chainguard-dev/chainguard` in its provider mirror. This repo does not vendor the provider. Commit the lock file `.terraform.lock.hcl` after `terraform init` so the mirror and the agents resolve the same build.
+An air-gapped Terraform Enterprise installation needs `chainguard-dev/chainguard` and `hashicorp/external` in its provider mirror. This repo does not vendor providers. Commit the lock file `.terraform.lock.hcl` after `terraform init` so the mirror and the agents resolve the same build.
 
 `login_options.disabled` stays unset. The provider skips the token exchange when automatic login is disabled, so a Terraform Enterprise run would fail before it could use the workload token.
 
@@ -181,7 +181,7 @@ On the workspace, set one sensitive environment variable:
 | --- | --- |
 | `CHAINGUARD_TOKEN` | Output of `chainctl auth token` |
 
-A Terraform variable named `chainguard_token` is equivalent. The hook reads `CHAINGUARD_TOKEN` first, then `TF_VAR_chainguard_token`. Vault can supply either one. Also set the Terraform variable `organization`.
+A Terraform variable named `chainguard_token` is equivalent. The hook reads `CHAINGUARD_TOKEN` first, then `TF_VAR_chainguard_token`. The value has to already be present in the run environment. Also set the Terraform variable `organization`. To read Vault during the run, use the runtime route below.
 
 Leave the OIDC variables unset: `TFC_WORKLOAD_IDENTITY_AUDIENCE`, `CHAINGUARD_IDENTITY_ID`, `TF_CHAINGUARD_IDENTITY`, and `TF_CHAINGUARD_IDENTITY_TOKEN`. Leave `chainguard_identity_id` and `chainguard_identity_token` unset.
 
@@ -190,7 +190,37 @@ Set both agent hooks to `examples/tfe-static-token-hook.sh`:
 * `TFC_AGENT_HOOK_PRE_PLAN`
 * `TFC_AGENT_HOOK_PRE_APPLY`
 
-Do not point those hooks at `examples/tfe-agent-hook.sh` at the same time. The access token expires. Replace the Vault value before it expires. When the token is no longer valid, the provider tries a browser login and the run fails. Remove this hook when the OIDC route is ready.
+Do not point those hooks at `examples/tfe-agent-hook.sh` at the same time. The access token expires. Replace the stored value before it expires. When the token is no longer valid, the provider tries a browser login and the run fails. Remove this hook when the OIDC route is ready.
+
+### Terraform Enterprise runtime Vault
+
+Use this when the run can log in to Vault and the token is not copied into a workspace variable. `chainguard_vault_secret` is the KV v2 path inside the mount. A Terraform variable value is a stored string, so that path is not fetched by itself. Plan and apply run `examples/vault-runtime-token.sh`, which logs in and writes the chainctl cache. State records that the read happened and which console API the cache is for. The token is not a Terraform output.
+
+On the workspace, set environment variables:
+
+| Environment variable | Value |
+| --- | --- |
+| `TFC_VAULT_PROVIDER_AUTH` | `true` |
+| `TFC_VAULT_ADDR` | Vault address, for example `https://vault.example.com:8200` |
+| `TFC_VAULT_RUN_ROLE` | JWT auth role that can read the secret |
+| `TFC_VAULT_NAMESPACE` | Vault namespace, when the cluster uses one. HCP Vault uses `admin` |
+
+`TFC_VAULT_AUTH_PATH` defaults to `jwt`. Set `TFC_VAULT_PLAN_ROLE` or `TFC_VAULT_APPLY_ROLE` when those phases use different roles. The workload token audience stays `vault.workload.identity`.
+
+Set Terraform variables:
+
+| Variable | Value |
+| --- | --- |
+| `organization` | Chainguard organization name |
+| `chainguard_vault_mount` | KV v2 mount. Default `secret` |
+| `chainguard_vault_secret` | Secret path inside the mount, for example `tfe/chainguard` |
+| `chainguard_vault_key` | Field that holds the token. Default `chainguard_token` |
+
+The field value is the output of `chainctl auth token`. Leave `chainguard_token`, `chainguard_identity_id`, and `chainguard_identity_token` unset. Leave both agent hooks unset. Leave `TFC_WORKLOAD_IDENTITY_AUDIENCE`, `TF_CHAINGUARD_IDENTITY`, and `TF_CHAINGUARD_IDENTITY_TOKEN` unset. The script refuses those Chainguard OIDC variables because the provider would exchange that token and ignore the cache.
+
+The agent image needs `curl`, `jq`, and `openssl`. The access token expires. Replace the Vault value before it expires, and leave more than a minute of life. A shorter remaining life makes the provider try a browser login, and the run fails.
+
+This read does not add capabilities to the Chainguard identity. The account that minted the token still needs permission to create the folders, image repos, and overlays in the plan.
 
 ## Local plan without applying
 
@@ -212,5 +242,7 @@ Deleting the YAML first makes apply fail. The image repo resource's delete is a 
 | `assemblies.tf` | Discovers YAML files and calls the assembly module |
 | `modules/assembly/` | Maps one YAML document to a repo name, tag selector, and overlay JSON |
 | `main.tf` | Folder, repo, overlay, and binding |
-| `providers.tf` | Token or Terraform Enterprise identity |
+| `providers.tf` | Token, Terraform Enterprise identity, or runtime Vault read |
 | `examples/tfe-agent-hook.sh` | Copies the workload token into the variables the provider reads |
+| `examples/tfe-static-token-hook.sh` | Writes a stored access token into the chainctl cache before plan and apply |
+| `examples/vault-runtime-token.sh` | Reads the access token from Vault during plan and apply and writes the chainctl cache |
