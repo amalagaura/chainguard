@@ -11,12 +11,12 @@ output "folders" {
 output "assemblies" {
   description = "Assembly file to the repo Chainguard syncs and the overlay bound to it."
   value = {
-    for file, assembly in local.assemblies : file => {
+    for id, assembly in local.assemblies : id => {
       folder     = assembly.folder
       repo       = assembly.repo
       source     = assembly.source
-      repo_id    = chainguard_image_repo.assembly[file].id
-      overlay_id = chainguard_image_overlay.assembly[file].id
+      repo_id    = chainguard_image_repo.assembly[id].id
+      overlay_id = chainguard_image_overlay.assembly[id].id
       pull       = "cgr.dev/${var.organization}/${assembly.repo}"
     }
   }

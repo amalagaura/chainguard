@@ -42,7 +42,7 @@ resource "chainguard_image_overlay" "assembly" {
   name      = "${each.value.folder}--${each.value.repo}"
   config    = each.value.overlay_json
 
-  depends_on = [terraform_data.assembly_check]
+  depends_on = [terraform_data.assembly_check, terraform_data.assembly_id]
 }
 
 resource "chainguard_image_overlay_binding" "assembly" {
