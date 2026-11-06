@@ -63,6 +63,8 @@ locals {
       selector_kind    = assembly.selector_kind
       selector_variant = assembly.selector_variant
       selector_tags    = assembly.selector_tags
+      has_overlay      = assembly.has_overlay
+      has_tags         = assembly.has_tags
       overlay_json     = assembly.overlay_json
     }
   }
@@ -102,22 +104,22 @@ resource "terraform_data" "assembly_check" {
     }
 
     precondition {
-      condition     = length(keys(jsondecode(each.value.overlay_json))) > 0
-      error_message = "assemblies/${each.value.file} has an empty Custom Assembly manifest."
+      condition     = each.value.has_overlay || !each.value.has_tags
+      error_message = "assemblies/${each.value.file} sets tags but has no Custom Assembly manifest to bind."
     }
 
     precondition {
-      condition     = contains(["ALL", "EXACT", "VARIANT"], each.value.selector_kind)
+      condition     = !each.value.has_overlay || contains(["ALL", "EXACT", "VARIANT"], each.value.selector_kind)
       error_message = "assemblies/${each.value.file} tags.kind must be all, exact, dev, or variant."
     }
 
     precondition {
-      condition     = each.value.selector_kind != "EXACT" || length(each.value.selector_tags) > 0
+      condition     = !each.value.has_overlay || each.value.selector_kind != "EXACT" || length(each.value.selector_tags) > 0
       error_message = "assemblies/${each.value.file} uses tags.kind exact and must set tags.names."
     }
 
     precondition {
-      condition     = each.value.selector_kind != "VARIANT" || each.value.selector_variant != ""
+      condition     = !each.value.has_overlay || each.value.selector_kind != "VARIANT" || each.value.selector_variant != ""
       error_message = "assemblies/${each.value.file} uses a variant selector and must set tags.variant, or use kind dev."
     }
   }

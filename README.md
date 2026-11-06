@@ -1,6 +1,6 @@
 # Chainguard Custom Assembly
 
-Terraform syncs the Custom Assembly YAML files in `assemblies/` into a Chainguard organization. A file directly in `assemblies/` becomes an image repo in the organization. A subdirectory becomes a Chainguard folder, and each file in it becomes an image repo in that folder. Every repo is synced from a catalog image, and the YAML is bound to that repo as a Custom Assembly overlay.
+Terraform syncs the YAML files in `assemblies/` into a Chainguard organization. A file directly in `assemblies/` becomes an image repo in the organization. A subdirectory becomes a Chainguard folder, and each file in it becomes an image repo in that folder. Every repo is synced from a catalog image. A file that contains a Custom Assembly manifest is bound to its repo as an overlay. A file with no manifest is a plain sync.
 
 Terraform uses the YAML files as the source of truth.
 
@@ -21,7 +21,7 @@ assemblies/<folder>/<name>.yaml
 | `source` | Catalog image to sync. Set it in the file. Defaults to `<name>` | `sync_config.source` |
 | `description` | Repo description. Set it in the file. Defaults to a one-line note | `description` |
 | `tags` | Which tags receive the overlay. Set it in the file. Defaults to every tag | `chainguard_image_overlay_binding` |
-| `overlay` | Custom Assembly manifest. When omitted, the rest of the file is the manifest | `chainguard_image_overlay.config` |
+| `overlay` | Custom Assembly manifest. When omitted, the rest of the file is the manifest. When that manifest is empty, no overlay or binding is created | `chainguard_image_overlay.config` |
 | `<name>` or `<folder>--<name>` | Overlay name. Overlays belong to the organization. A folder repo includes the folder so the name stays unique | `chainguard_image_overlay.assembly["<name>"]` or `["<folder>/<name>"]` |
 
 The filename, without `.yaml` or `.yml`, is the repo name. Folder names and repo names use Chainguard's name rules: lowercase letters, digits, and hyphens. The Terraform key has no extension: `<name>` for a file in `assemblies/`, and `<folder>/<name>` for a file in a directory. `name.yaml` and `name.yml` in the same directory are that same key, and the plan fails. The same repo name in the organization and in a folder is allowed, because the parents differ.
@@ -79,7 +79,15 @@ Do not put `source`, `tags`, or `description` inside `overlay`. A `repo` key any
 
 ## What an apply creates
 
-For a file directly in `assemblies/`:
+A file with no manifest copies the catalog image and stops. `source` names that image. The filename is the repo name, so this file copies `wolfi-base` into the organization without an overlay:
+
+```yaml
+source: wolfi-base
+```
+
+`description` may be set. `tags` may not: tags choose which image tags receive an overlay, and this file has no overlay.
+
+For any other file directly in `assemblies/` whose manifest is not empty:
 
 1. An image repo whose parent is the organization, synced from `source`.
 2. An organization-level overlay named `<name>`.
@@ -89,8 +97,8 @@ For a file in a directory, `chainctl` needs two commands because the folder has 
 
 1. A folder under the organization, shared by every file in that directory. This is `chainctl iam groups create <folder> --parent <organization>`.
 2. An image repo whose parent is that folder, synced from `source`. This is `chainctl images repos create <name> --parent <folder> --source <source>`. The repo's `parent_id` is the folder id, so Terraform creates the folder first.
-3. An organization-level overlay named `<folder>--<name>`.
-4. A binding from that overlay to that repo.
+3. When the file has a manifest, an organization-level overlay named `<folder>--<name>`.
+4. When the file has a manifest, a binding from that overlay to that repo.
 
 Changing an overlay replaces it. Chainguard deletes the overlay and creates it again, and the binding is replaced with it, so a production tag can rebuild twice. Read the plan before applying a change to a repo that is already in use.
 

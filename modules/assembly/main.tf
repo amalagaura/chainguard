@@ -64,7 +64,18 @@ output "source" {
 }
 
 output "description" {
-  value = try(local.doc.description, "Custom assembly of ${try(local.doc.source, local.name)}.")
+  value = try(
+    local.doc.description,
+    length(keys(local.manifest)) > 0 ? "Custom assembly of ${try(local.doc.source, local.name)}." : "Sync of ${try(local.doc.source, local.name)}.",
+  )
+}
+
+output "has_overlay" {
+  value = length(keys(local.manifest)) > 0
+}
+
+output "has_tags" {
+  value = contains(keys(local.doc), "tags")
 }
 
 output "selector_kind" {

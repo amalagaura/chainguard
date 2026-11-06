@@ -53,7 +53,10 @@ resource "chainguard_image_repo" "assembly" {
 }
 
 resource "chainguard_image_overlay" "assembly" {
-  for_each = local.assemblies
+  for_each = {
+    for id, assembly in local.assemblies : id => assembly
+    if assembly.has_overlay
+  }
 
   # Overlays are organization-scoped. The folder, when there is one, owns
   # the image repo, and the binding below attaches this overlay to that repo.
@@ -65,7 +68,10 @@ resource "chainguard_image_overlay" "assembly" {
 }
 
 resource "chainguard_image_overlay_binding" "assembly" {
-  for_each = local.assemblies
+  for_each = {
+    for id, assembly in local.assemblies : id => assembly
+    if assembly.has_overlay
+  }
 
   repo_id    = chainguard_image_repo.assembly[each.key].id
   overlay_id = chainguard_image_overlay.assembly[each.key].id
