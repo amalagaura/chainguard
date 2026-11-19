@@ -198,6 +198,7 @@ Deleting the YAML first makes apply fail. The image repo resource's delete is a 
 | `assemblies.tf` | Discovers YAML files and calls the assembly module |
 | `assembly_fragments/` | Shared manifest files listed by `include`. Not image repos |
 | `modules/assembly/` | Maps one YAML document to a repo name, tag selector, and overlay JSON |
+| `tests/` | `terraform test -test-directory=tests`. Fixtures are inline and do not read `assemblies/` |
 | `main.tf` | Folder, repo, overlay, and binding |
 | `providers.tf` | Exchanges the OIDC token minted by `scripts/mint-jwt.sh` |
 | `scripts/mint-jwt.sh` | Signs an OIDC JWT. Prints it, or writes it when given an output path |

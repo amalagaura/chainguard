@@ -8,7 +8,7 @@ run "include_merges_maps_and_appends_lists" {
   variables {
     filename = "custom/app.yaml"
     raw_json = jsonencode({
-      source  = "wolfi-base"
+      source  = "example"
       include = ["assembly_fragments/certificates.yaml"]
       environment = {
         SHARED = "image"
@@ -144,9 +144,9 @@ run "no_include_keeps_the_image_manifest" {
   }
 
   variables {
-    filename = "wolfi-base.yaml"
+    filename = "example.yaml"
     raw_json = jsonencode({
-      source = "wolfi-base"
+      source = "example"
       contents = {
         packages = ["curl"]
       }
@@ -161,7 +161,7 @@ run "no_include_keeps_the_image_manifest" {
   }
 
   assert {
-    condition     = output.source == "wolfi-base" && output.repo == "wolfi-base"
+    condition     = output.source == "example" && output.repo == "example"
     error_message = "source and the repo name still come from the image file."
   }
 }
@@ -201,9 +201,9 @@ run "source_only_has_no_overlay" {
   }
 
   variables {
-    filename = "wolfi-base.yaml"
+    filename = "example.yaml"
     raw_json = jsonencode({
-      source = "wolfi-base"
+      source = "example"
     })
   }
 
@@ -213,7 +213,7 @@ run "source_only_has_no_overlay" {
   }
 
   assert {
-    condition     = output.description == "Sync of wolfi-base." && output.source == "wolfi-base"
+    condition     = output.description == "Sync of example." && output.source == "example"
     error_message = "A source-only file describes itself as a sync of its catalog image."
   }
 }
@@ -228,7 +228,7 @@ run "two_fragments_apply_in_order" {
   variables {
     filename = "custom/app.yaml"
     raw_json = jsonencode({
-      source  = "wolfi-base"
+      source  = "example"
       include = ["assembly_fragments/base.yaml", "assembly_fragments/certificates.yaml"]
       environment = {
         SHARED = "image"
@@ -480,7 +480,7 @@ run "include_path_count_must_match" {
 
   variables {
     filename          = "custom/app.yaml"
-    raw_json          = jsonencode({ source = "wolfi-base" })
+    raw_json          = jsonencode({ source = "example" })
     include_paths     = ["assembly_fragments/certificates.yaml"]
     include_raw_jsons = []
   }
