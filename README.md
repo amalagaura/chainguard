@@ -110,70 +110,47 @@ Image repos ignore `active_tags`, `bundles`, `tier`, and `readme` after create. 
 
 ## Authentication
 
-The provider block sets no browser login and no organization id. Credentials come from the environment.
+Plan and apply call `scripts/mint-jwt.sh` with the signing key, issuer, audience, subject, lifetime, and an output path. The script writes the JWT to `.terraform/chainguard-oidc.jwt` and prints that path. `login_options.identity_token` is the path. State records the path. The provider exchanges the token for `chainguard_identity_id`.
 
-### Local starter plan
+The three claims have to be the same values on the assumable identity. Chainguard rejects the exchange when any one differs.
 
-The starter plan has no assumable identity, so use a Chainguard token from `chainctl`. The provider reads the token `chainctl auth login` caches. Leave `chainguard_identity_id` and `chainguard_identity_token` unset.
+| Claim | Terraform variable | What to put |
+| --- | --- | --- |
+| Audience | `chainguard_oidc_audience` | `https://issuer.enforce.dev` |
+| Subject | `chainguard_oidc_subject` | `terraform:chainguard` |
+| Issuer | `chainguard_oidc_issuer` | A URL you choose, for example `https://oidc.example.com` |
+
+The audience is who the token is for. `https://issuer.enforce.dev` is Chainguard's STS.
+
+The subject is who the token represents. The identity's subject has to be that exact string.
+
+The issuer is who signed the token. It must be the URL on the identity, with no trailing slash.
+
+Create the identity once, from an account that can create identities and role bindings.
+
+`*.pem` is gitignored. Build the key, then the JWKS, then the identity:
 
 ```shell
-chainctl auth login
-cp terraform.tfvars.example terraform.tfvars
-# edit organization
-terraform init
-terraform plan
+openssl genrsa -out oidc-private.pem 2048
+scripts/public-jwks.sh oidc-private.pem > oidc-public.jwks
+chainctl iam identities create minted-custom-assembly \
+  --parent "$ORGANIZATION" \
+  --identity-issuer "https://oidc.example.com" \
+  --issuer-keys "$(cat oidc-public.jwks)" \
+  --audience "https://issuer.enforce.dev" \
+  --subject "terraform:chainguard" \
+  --role owner
 ```
 
-`terraform.tfvars` is gitignored. Do not commit a token. There is no provider argument for a raw Chainguard access token. `chainctl auth login` is the supported way to supply one. `chainctl auth token` prints the cached token so you can confirm which identity will run the plan.
+Set `chainguard_identity_id` to the UIDP that command prints. The machine that runs plan and apply needs `bash`, `jq`, `openssl`, and `uuidgen`.
 
-A headless machine that already has a token can copy the `chainctl` config directory from a machine that logged in. Do not put that token in `tfvars`.
+An air-gapped installation needs `chainguard-dev/chainguard` and `hashicorp/external` in its provider mirror. This repo does not vendor providers. Commit the lock file `.terraform.lock.hcl` after `terraform init` so every run resolves the same build.
 
-### Terraform Enterprise OIDC
-
-Create the assumable identity once, with a user who can administer the corporate organization. This module does not create it. The apply that syncs assemblies assumes the identity, so the identity has to exist first.
-
-Match the identity to the Terraform Enterprise workload token:
-
-```hcl
-resource "chainguard_identity" "tfe" {
-  parent_id = data.chainguard_group.org.id
-  name      = "tfe-custom-assembly"
-
-  claim_match {
-    issuer   = "https://tfe.example.com"          # Terraform Enterprise URL, no trailing slash
-    audience = "https://issuer.enforce.dev"       # same value as TFC_WORKLOAD_IDENTITY_AUDIENCE
-    subject_pattern = "organization:<org>:project:<project>:workspace:<workspace>:run_phase:*"
-  }
-}
-```
-
-Bind a role that can create folders, image repos, and overlays. The built-in `owner` role can. Narrow it to a custom role after the first successful apply shows which API calls the run makes. `editor` includes `registry.overlays.edit` and is not always enough to create a folder.
-
-On the workspace:
-
-| Environment variable | Value |
-| --- | --- |
-| `TFC_WORKLOAD_IDENTITY_AUDIENCE` | `https://issuer.enforce.dev` |
-| `CHAINGUARD_IDENTITY_ID` | UIDP of the assumable identity |
-
-Set both agent hooks to `examples/tfe-agent-hook.sh`:
-
-* `TFC_AGENT_HOOK_PRE_PLAN`
-* `TFC_AGENT_HOOK_PRE_APPLY`
-
-The hook copies `TFC_WORKLOAD_IDENTITY_TOKEN` to `TF_CHAINGUARD_IDENTITY_TOKEN` and `CHAINGUARD_IDENTITY_ID` to `TF_CHAINGUARD_IDENTITY`. The provider reads those two variables itself. Terraform configuration cannot read `TFC_WORKLOAD_IDENTITY_TOKEN` directly, which is why the hook exists.
-
-Set the Terraform variable `organization` on the workspace. Leave the identity variables unset when the hook exports the environment variables.
-
-A VCS-driven workspace does not need a backend block. For CLI-driven runs against Terraform Enterprise, add a `backend "remote"` block locally and pass the hostname, organization, and workspace with `-backend-config`. Do not commit that block with a real hostname.
-
-An air-gapped Terraform Enterprise installation needs `chainguard-dev/chainguard` in its provider mirror. This repo does not vendor the provider. Commit the lock file `.terraform.lock.hcl` after `terraform init` so the mirror and the agents resolve the same build.
-
-`login_options.disabled` stays unset. The provider skips the token exchange when automatic login is disabled, so a Terraform Enterprise run would fail before it could use the workload token.
+`login_options.disabled` stays unset. The provider skips the token exchange when automatic login is disabled.
 
 ## Local plan without applying
 
-`terraform validate` checks the configuration. `terraform plan` contacts Chainguard, which requires the organization name and a token. The example manifests use `wolfi-base` and `busybox`. The organization must be entitled to those catalog images, and Custom Assembly overlays must be enabled. A starter organization may not have overlays. The corporate organization is the one this module is written for.
+`terraform validate` checks the configuration. `terraform plan` contacts Chainguard, which requires the organization name and a token. The organization must be entitled to those catalog images, and Custom Assembly overlays must be enabled. A starter organization may not have overlays. The corporate organization is the one this module is written for.
 
 ## Removing an assembly
 
@@ -191,5 +168,6 @@ Deleting the YAML first makes apply fail. The image repo resource's delete is a 
 | `assemblies.tf` | Discovers YAML files and calls the assembly module |
 | `modules/assembly/` | Maps one YAML document to a repo name, tag selector, and overlay JSON |
 | `main.tf` | Folder, repo, overlay, and binding |
-| `providers.tf` | Token or Terraform Enterprise identity |
-| `examples/tfe-agent-hook.sh` | Copies the workload token into the variables the provider reads |
+| `providers.tf` | Exchanges the OIDC token minted by `scripts/mint-jwt.sh` |
+| `scripts/mint-jwt.sh` | Signs an OIDC JWT. Prints it, or writes it when given an output path |
+| `scripts/public-jwks.sh` | Prints the JWKS to register with the assumable identity |

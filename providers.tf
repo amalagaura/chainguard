@@ -1,11 +1,21 @@
+# Plan and apply mint an OIDC token with scripts/mint-jwt.sh. The script
+# prints the file path because data.external stores stdout in state.
+# The provider reads that file and exchanges it for chainguard_identity_id.
+data "external" "chainguard_minted_oidc" {
+  program = [
+    "${path.module}/scripts/mint-jwt.sh",
+    var.chainguard_oidc_signing_key,
+    var.chainguard_oidc_issuer,
+    var.chainguard_oidc_audience,
+    var.chainguard_oidc_subject,
+    tostring(var.chainguard_oidc_ttl),
+    "${path.root}/.terraform/chainguard-oidc.jwt",
+  ]
+}
+
 provider "chainguard" {
-  # Both attributes stay unset on a laptop. The provider then uses the token
-  # chainctl cached. On Terraform Enterprise, set TF_CHAINGUARD_IDENTITY and
-  # TF_CHAINGUARD_IDENTITY_TOKEN (see README). Those environment variables
-  # win over these arguments, and an identity token is exclusive with the
-  # browser login options, so this block does not set any of those.
   login_options {
     identity_id    = var.chainguard_identity_id
-    identity_token = var.chainguard_identity_token
+    identity_token = data.external.chainguard_minted_oidc.result.token_file
   }
 }
