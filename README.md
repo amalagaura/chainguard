@@ -77,6 +77,36 @@ A single `truststore` object is wrapped in a list. Any other unknown field fails
 
 Do not put `source`, `tags`, or `description` inside `overlay`. A `repo` key anywhere in the file fails the plan, because the filename is the repo name.
 
+### Shared fragments
+
+YAML anchors stay inside one file. A shared file lives in `assembly_fragments/` and is listed from the image with `include`. Terraform merges it into that image's manifest and removes `include` before the manifest is sent. The path is relative to the repository root and starts with `assembly_fragments/`, so the file is not turned into an image repo.
+
+```yaml
+# assembly_fragments/certificates.yaml
+certificates:
+  additional:
+    - name: internal-ca
+      content: |
+        -----BEGIN CERTIFICATE-----
+        ...
+        -----END CERTIFICATE-----
+environment:
+  REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+```
+
+```yaml
+# assemblies/custom/wolfi-base.yaml
+include:
+  - assembly_fragments/certificates.yaml
+contents:
+  packages:
+    - curl
+environment:
+  APP_ENV: production
+```
+
+Terraform loads each listed file into a fixed object and merges it during plan. Files are merged in the order listed, and the image file is applied last. `environment` and `annotations` combine, and the image wins on a shared key. `contents.packages`, `contents.runtime_repositories`, `contents.runtime_keyring`, `certificates.additional`, `accounts.users`, `accounts.groups`, and `preflight` are appended, fragment first. `fail_mode`, `guarded_entrypoint`, `accounts.run_as`, `command_override`, and `truststore` are replaced by the later file. A `truststore` object is sent as a one-element `truststores` list. A fragment cannot contain `include`. A key outside this set fails the plan.
+
 ## What an apply creates
 
 A file with no manifest copies the catalog image and stops. `source` names that image. The filename is the repo name, so this file copies `wolfi-base` into the organization without an overlay:
@@ -142,7 +172,7 @@ chainctl iam identities create minted-custom-assembly \
   --role owner
 ```
 
-Set `chainguard_identity_id` to the UIDP that command prints. The machine that runs plan and apply needs `bash`, `jq`, `openssl`, and `uuidgen`.
+Set `chainguard_identity_id` to the UIDP that command prints. The machine that runs plan and apply needs `bash`, `jq`, `openssl`, and `uuidgen`. `scripts/public-jwks.sh` also needs `python3` when you register the identity.
 
 An air-gapped installation needs `chainguard-dev/chainguard` and `hashicorp/external` in its provider mirror. This repo does not vendor providers. Commit the lock file `.terraform.lock.hcl` after `terraform init` so every run resolves the same build.
 
@@ -166,6 +196,7 @@ Deleting the YAML first makes apply fail. The image repo resource's delete is a 
 | --- | --- |
 | `assemblies/` | Custom Assembly YAML |
 | `assemblies.tf` | Discovers YAML files and calls the assembly module |
+| `assembly_fragments/` | Shared manifest files listed by `include`. Not image repos |
 | `modules/assembly/` | Maps one YAML document to a repo name, tag selector, and overlay JSON |
 | `main.tf` | Folder, repo, overlay, and binding |
 | `providers.tf` | Exchanges the OIDC token minted by `scripts/mint-jwt.sh` |

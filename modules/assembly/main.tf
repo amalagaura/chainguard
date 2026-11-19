@@ -8,51 +8,22 @@ variable "raw_json" {
   description = "JSON encoding of the YAML document. Passing JSON keeps each file's object schema inside this module."
 }
 
+variable "include_raw_jsons" {
+  type        = list(string)
+  default     = []
+  description = "JSON encoding of each file listed in include, in that order."
+}
+
+variable "include_paths" {
+  type        = list(string)
+  default     = []
+  description = "Repository-relative paths of include_raw_jsons, used when a fragment is not a manifest."
+}
+
 locals {
-  doc  = jsondecode(var.raw_json)
-  name = trimsuffix(trimsuffix(basename(var.filename), ".yaml"), ".yml")
-
-  meta_keys = toset(["source", "tags", "description", "overlay"])
-
-  # Both branches are strings. A conditional cannot return two object types.
-  body_json = contains(keys(local.doc), "overlay") ? jsonencode(local.doc.overlay) : jsonencode({
-    for key, value in local.doc : key => value if !contains(local.meta_keys, key)
-  })
-  body = jsondecode(local.body_json)
-
-  # chainctl uses accounts.run-as. The overlay API requires accounts.run_as.
-  run_as = try(local.body.accounts.run_as, try(local.body.accounts["run-as"], null))
-  accounts_json = try(local.body.accounts, null) == null ? "{}" : jsonencode({
-    accounts = merge(
-      {
-        for key, value in local.body.accounts :
-        key => value if !contains(["run-as", "run_as"], key)
-      },
-      {
-        for key, value in { run_as = local.run_as } :
-        key => value if value != null
-      },
-    )
-  })
-
-  # chainctl uses a singular truststore. The overlay API requires truststores.
-  truststore_value = try(local.body.truststores, null) != null ? local.body.truststores : try(local.body.truststore, null)
-  truststores_json = (
-    local.truststore_value == null ? "{}" :
-    can(tolist(local.truststore_value)) ? jsonencode({ truststores = local.truststore_value }) :
-    jsonencode({ truststores = [local.truststore_value] })
-  )
-
-  manifest = merge(
-    {
-      for key, value in local.body :
-      key => value if !contains(["accounts", "truststore", "truststores"], key)
-    },
-    jsondecode(local.accounts_json),
-    jsondecode(local.truststores_json),
-  )
-
-  tag_kind = lower(try(local.doc.tags.kind, "all"))
+  name             = trimsuffix(trimsuffix(basename(var.filename), ".yaml"), ".yml")
+  image_is_mapping = can(keys(jsondecode(var.raw_json)))
+  tag_kind         = lower(try(jsondecode(var.raw_json).tags.kind, "all"))
 }
 
 output "repo" {
@@ -60,22 +31,22 @@ output "repo" {
 }
 
 output "source" {
-  value = try(local.doc.source, local.name)
+  value = try(jsondecode(var.raw_json).source, local.name)
 }
 
 output "description" {
   value = try(
-    local.doc.description,
-    length(keys(local.manifest)) > 0 ? "Custom assembly of ${try(local.doc.source, local.name)}." : "Sync of ${try(local.doc.source, local.name)}.",
+    jsondecode(var.raw_json).description,
+    local.has_manifest ? "Custom assembly of ${try(jsondecode(var.raw_json).source, local.name)}." : "Sync of ${try(jsondecode(var.raw_json).source, local.name)}.",
   )
 }
 
 output "has_overlay" {
-  value = length(keys(local.manifest)) > 0
+  value = local.has_manifest
 }
 
 output "has_tags" {
-  value = contains(keys(local.doc), "tags")
+  value = local.image_is_mapping ? contains(keys(jsondecode(var.raw_json)), "tags") : false
 }
 
 output "selector_kind" {
@@ -94,16 +65,16 @@ output "selector_kind" {
 output "selector_variant" {
   value = (
     local.tag_kind == "dev" ? "DEV" :
-    try(upper(local.doc.tags.variant), "")
+    try(upper(jsondecode(var.raw_json).tags.variant), "")
   )
 }
 
 output "selector_tags" {
-  value = try([for tag in local.doc.tags.names : tostring(tag)], [])
+  value = try([for tag in jsondecode(var.raw_json).tags.names : tostring(tag)], [])
 }
 
 output "overlay_json" {
-  value = jsonencode(local.manifest)
+  value = local.overlay_json
 }
 
 resource "terraform_data" "repo_name" {
@@ -111,8 +82,23 @@ resource "terraform_data" "repo_name" {
 
   lifecycle {
     precondition {
-      condition     = !contains(keys(local.doc), "repo") && !contains(try(keys(local.body), []), "repo")
+      condition     = module.image_document.valid
+      error_message = module.image_document.error
+    }
+    precondition {
+      condition     = !local.any_repo
       error_message = "Remove repo from ${var.filename}. The filename is the image repo name."
+    }
+  }
+}
+
+resource "terraform_data" "fragments" {
+  count = length(var.include_raw_jsons) == 0 && length(var.include_paths) == 0 ? 0 : 1
+
+  lifecycle {
+    precondition {
+      condition     = local.fragments_ok
+      error_message = local.fragment_error_message
     }
   }
 }

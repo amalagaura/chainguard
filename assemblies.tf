@@ -41,14 +41,51 @@ locals {
     for id, file in local.assembly_file :
     id => jsonencode(yamldecode(file("${local.assembly_root}/${file}")))
   }
+
+  # JSON strings, including the JSON literal null. The include values do not
+  # share one Terraform type across files.
+  assembly_include_entries = {
+    for id, raw in local.assembly_raw_json :
+    id => jsonencode(try(jsondecode(raw).include, null))
+  }
+
+  # A missing include is valid. Any other value must be a list of relative paths.
+  assembly_include_ok = {
+    for id, encoded in local.assembly_include_entries :
+    id => (
+      encoded == "null" ? true :
+      !startswith(encoded, "[") ? false :
+      alltrue([
+        for path in jsondecode(encoded) : (
+          can(regex("^[A-Za-z0-9._/-]+$", path)) ? (
+            length(regexall("(^|/)\\.\\.(/|$)", path)) == 0 &&
+            !startswith(path, "/") &&
+            startswith(path, "assembly_fragments/")
+          ) : false
+        )
+      ])
+    )
+  }
+
+  # Invalid includes become an empty list so file() is not called on them.
+  # The assembly_include precondition still fails the plan.
+  assembly_include_paths_json = {
+    for id, encoded in local.assembly_include_entries :
+    id => encoded == "null" || !local.assembly_include_ok[id] ? "[]" : encoded
+  }
 }
 
 module "assembly" {
   source   = "./modules/assembly"
   for_each = local.assembly_raw_json
 
-  filename = local.assembly_file[each.key]
-  raw_json = each.value
+  filename      = local.assembly_file[each.key]
+  raw_json      = each.value
+  include_paths = jsondecode(local.assembly_include_paths_json[each.key])
+  include_raw_jsons = [
+    for path in jsondecode(local.assembly_include_paths_json[each.key]) :
+    jsonencode(yamldecode(file("${path.module}/${path}")))
+  ]
 }
 
 locals {
@@ -73,6 +110,19 @@ locals {
     for assembly in local.assemblies : assembly.folder
     if assembly.folder != null
   ])
+}
+
+resource "terraform_data" "assembly_include" {
+  for_each = local.assembly_raw_json
+
+  input = each.key
+
+  lifecycle {
+    precondition {
+      condition     = local.assembly_include_ok[each.key]
+      error_message = "assemblies/${local.assembly_file[each.key]} include must be a list of paths under assembly_fragments/, such as assembly_fragments/certificates.yaml. A path stays inside that directory and does not use .."
+    }
+  }
 }
 
 resource "terraform_data" "assembly_id" {
