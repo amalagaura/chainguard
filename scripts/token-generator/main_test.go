@@ -1,7 +1,9 @@
 package main
 
 import (
-	"encoding/base64"
+	"crypto/x509"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -12,51 +14,74 @@ func TestConfigFromEnvDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.port != "8080" || cfg.audience != "sts.amazonaws.com" || cfg.expirationSeconds != 3600 || cfg.httpTimeout != 15*time.Second {
+	if cfg.port != "8080" || cfg.httpTimeout != 15*time.Second {
 		t.Fatalf("defaults: %+v", cfg)
 	}
 }
 
-func TestConfigFromEnvRejectsBadNumbers(t *testing.T) {
+func TestConfigFromEnvRejectsBadPort(t *testing.T) {
 	_, err := configFromEnv(func(k string) string {
-		if k == "TOKEN_EXPIRATION_SECONDS" {
+		if k == "TOKEN_PORT" {
 			return "0"
 		}
 		return ""
 	})
 	if err == nil {
-		t.Fatal("expected expiration error")
+		t.Fatal("expected port error")
 	}
 }
 
-func TestServiceAccountName(t *testing.T) {
-	bound := jwt(t, `{"sub":"system:serviceaccount:default:pod-sa","kubernetes.io":{"serviceaccount":{"name":"pod-sa"}}}`)
-	name, err := serviceAccountName(bound)
-	if err != nil || name != "pod-sa" {
-		t.Fatalf("bound: %q %v", name, err)
-	}
-
-	legacy := jwt(t, `{"kubernetes.io/serviceaccount/service-account.name":"legacy-sa"}`)
-	name, err = serviceAccountName(legacy)
-	if err != nil || name != "legacy-sa" {
-		t.Fatalf("legacy: %q %v", name, err)
-	}
-
-	subject := jwt(t, `{"sub":"system:serviceaccount:ns:from-sub"}`)
-	name, err = serviceAccountName(subject)
-	if err != nil || name != "from-sub" {
-		t.Fatalf("sub: %q %v", name, err)
-	}
-}
-
-func jwt(t *testing.T, payload string) string {
-	t.Helper()
-	return "e30." + base64.RawURLEncoding.EncodeToString([]byte(payload)) + ".sig"
-}
-
-func TestServiceAccountNameRejectsGarbage(t *testing.T) {
-	_, err := serviceAccountName("not-a-jwt")
-	if err == nil || !strings.Contains(err.Error(), "JWT") {
+func TestParseMintRequest(t *testing.T) {
+	req, err := parseMintRequest(strings.NewReader(`{"name":"builder","audience":"sts.amazonaws.com","expiration_seconds":3600}`))
+	if err != nil {
 		t.Fatal(err)
+	}
+	if req.Name != "builder" || req.Audience != "sts.amazonaws.com" || req.ExpirationSeconds != 3600 {
+		t.Fatalf("%+v", req)
+	}
+}
+
+func TestParseMintRequestRejectsIncomplete(t *testing.T) {
+	for _, body := range []string{
+		`{}`,
+		`{"name":"builder","audience":"sts.amazonaws.com"}`,
+		`{"name":"Builder","audience":"sts.amazonaws.com","expiration_seconds":3600}`,
+		`{"name":"../admin","audience":"sts.amazonaws.com","expiration_seconds":3600}`,
+		`{"name":"builder","audience":"","expiration_seconds":3600}`,
+		`{"name":"builder","audience":"sts.amazonaws.com","expiration_seconds":0}`,
+		`{"service_account":"builder"}`,
+	} {
+		_, err := parseMintRequest(strings.NewReader(body))
+		if err == nil {
+			t.Fatalf("accepted %s", body)
+		}
+	}
+}
+
+func TestTokenAPIClientDisablesKeepAlives(t *testing.T) {
+	parent := &http.Client{Timeout: time.Second}
+	pool := x509.NewCertPool()
+	client := tokenAPIClient(parent, pool)
+	if client == parent {
+		t.Fatal("per-call client aliases the shared client")
+	}
+	if parent.Transport != nil {
+		t.Fatal("shared client transport was mutated")
+	}
+	tr, ok := client.Transport.(*http.Transport)
+	if !ok || !tr.DisableKeepAlives {
+		t.Fatal("keep-alives still enabled on throwaway transport")
+	}
+	if tr.TLSClientConfig == nil || tr.TLSClientConfig.RootCAs != pool {
+		t.Fatal("CA pool not installed")
+	}
+}
+
+func TestTokenHandlerBadBody(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/token", strings.NewReader(`{}`))
+	rec := httptest.NewRecorder()
+	handleToken(rec, req, &http.Client{})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status %d body %s", rec.Code, rec.Body.String())
 	}
 }
