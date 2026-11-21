@@ -4,7 +4,7 @@ output "organization_id" {
 }
 
 output "folders" {
-  description = "Chainguard folder name to UIDP."
+  description = "Chainguard folder path to UIDP. A nested folder's key is the path, such as platform/prod."
   value       = { for name, folder in chainguard_group.folder : name => folder.id }
 }
 

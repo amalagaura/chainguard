@@ -6,16 +6,23 @@ data "chainguard_group" "org" {
 resource "chainguard_group" "folder" {
   for_each = local.assembly_folders
 
-  parent_id   = data.chainguard_group.org.id
-  name        = each.value
+  # dirname of a top-level folder is ".". A deeper folder is parented to the
+  # folder above it, so platform/prod waits for platform.
+  parent_id = (
+    dirname(each.value) == "." ?
+    data.chainguard_group.org.id :
+    chainguard_group.folder[dirname(each.value)].id
+  )
+  name        = basename(each.value)
   description = "Custom Assembly images from assemblies/${each.value}."
 }
 
 locals {
   # chainctl creates a repo under a folder in two steps: iam groups create,
-  # then images repos create --parent <folder>. The folder id reference is
-  # the second step. A file directly under assemblies/ has no folder, so the
-  # repo parent is the organization.
+  # then images repos create --parent <folder>. Each deeper folder uses the
+  # folder above it as --parent. A file directly under assemblies/ has no
+  # folder, so the repo parent is the organization. The repo parent is the
+  # deepest folder.
   repo_parent_id = merge(
     {
       for id, assembly in local.assemblies :
@@ -61,7 +68,7 @@ resource "chainguard_image_overlay" "assembly" {
   # Overlays are organization-scoped. The folder, when there is one, owns
   # the image repo, and the binding below attaches this overlay to that repo.
   parent_id = data.chainguard_group.org.id
-  name      = each.value.folder == null ? each.value.repo : "${each.value.folder}--${each.value.repo}"
+  name      = each.value.folder == null ? each.value.repo : "${replace(each.value.folder, "/", "--")}--${each.value.repo}"
   config    = each.value.overlay_json
 
   depends_on = [terraform_data.assembly_check, terraform_data.assembly_id]

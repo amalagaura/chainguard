@@ -2,14 +2,13 @@ locals {
   assembly_root = "${path.module}/assemblies"
 
   # assemblies/<name>.yaml is a repo in the organization, with no folder.
-  # assemblies/<folder>/<name>.yaml is a repo in that folder.
+  # assemblies/<folder>/<name>.yaml is a repo in that folder. Deeper paths
+  # such as assemblies/platform/prod/<name>.yaml create each folder in order.
   # .yml is accepted as well. The Terraform key has no extension:
-  # <name>, or <folder>/<name>.
+  # <name>, or <folder>/<name>. ** matches the root and every depth.
   assembly_files = setunion(
-    fileset(local.assembly_root, "*.yaml"),
-    fileset(local.assembly_root, "*.yml"),
-    fileset(local.assembly_root, "*/*.yaml"),
-    fileset(local.assembly_root, "*/*.yml"),
+    fileset(local.assembly_root, "**/*.yaml"),
+    fileset(local.assembly_root, "**/*.yml"),
   )
 
   # Same stem rule as modules/assembly. .yaml and .yml for one name share an id.
@@ -83,8 +82,8 @@ module "assembly" {
   raw_json      = each.value
   include_paths = jsondecode(local.assembly_include_paths_json[each.key])
   include_raw_jsons = [
-    for path in jsondecode(local.assembly_include_paths_json[each.key]) :
-    jsonencode(yamldecode(file("${path.module}/${path}")))
+    for include_path in jsondecode(local.assembly_include_paths_json[each.key]) :
+    jsonencode(yamldecode(file("${path.module}/${include_path}")))
   ]
 }
 
@@ -106,10 +105,14 @@ locals {
     }
   }
 
-  assembly_folders = toset([
-    for assembly in local.assemblies : assembly.folder
-    if assembly.folder != null
-  ])
+  # Every directory on the path, not only the leaf. platform/prod contributes
+  # platform and platform/prod. The Chainguard name is the last segment.
+  assembly_folders = toset(flatten([
+    for assembly in local.assemblies : assembly.folder == null ? [] : [
+      for depth in range(length(split("/", assembly.folder))) :
+      join("/", slice(split("/", assembly.folder), 0, depth + 1))
+    ]
+  ]))
 }
 
 resource "terraform_data" "assembly_include" {
