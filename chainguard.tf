@@ -4,17 +4,25 @@ data "chainguard_group" "org" {
 }
 
 resource "chainguard_group" "folder" {
-  for_each = local.assembly_folders
+  for_each = local.folders_at_depth[1]
 
-  # dirname of a top-level folder is ".". A deeper folder is parented to the
-  # folder above it, so platform/prod waits for platform.
-  parent_id = (
-    dirname(each.value) == "." ?
-    data.chainguard_group.org.id :
-    chainguard_group.folder[dirname(each.value)].id
-  )
+  parent_id   = data.chainguard_group.org.id
   name        = basename(each.value)
   description = "Custom Assembly images from assemblies/${each.value}."
+}
+
+# Deeper folders live in their own module so a folder can use the id of the
+# folder above it. One resource cannot read another instance of itself.
+module "folder_2" {
+  source     = "./modules/folder"
+  paths      = local.folders_at_depth[2]
+  parent_ids = { for path, folder in chainguard_group.folder : path => folder.id }
+}
+
+module "folder_3" {
+  source     = "./modules/folder"
+  paths      = local.folders_at_depth[3]
+  parent_ids = module.folder_2.ids
 }
 
 locals {
@@ -23,6 +31,12 @@ locals {
   # folder above it as --parent. A file directly under assemblies/ has no
   # folder, so the repo parent is the organization. The repo parent is the
   # deepest folder.
+  folder_ids = merge(
+    { for path, folder in chainguard_group.folder : path => folder.id },
+    module.folder_2.ids,
+    module.folder_3.ids,
+  )
+
   repo_parent_id = merge(
     {
       for id, assembly in local.assemblies :
@@ -31,7 +45,7 @@ locals {
     },
     {
       for id, assembly in local.assemblies :
-      id => chainguard_group.folder[assembly.folder].id
+      id => local.folder_ids[assembly.folder]
       if assembly.folder != null
     },
   )

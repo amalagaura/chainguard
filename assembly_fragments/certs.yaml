@@ -1,0 +1,5 @@
+certificates:
+  additional:
+    - name: something
+      content: |
+          something

@@ -113,6 +113,31 @@ locals {
       join("/", slice(split("/", assembly.folder), 0, depth + 1))
     ]
   ]))
+
+  # A folder resource cannot read another instance of itself. Each depth is a
+  # separate resource, and three is the deepest path this configuration creates.
+  folder_depth_limit = 3
+
+  folders_at_depth = {
+    for depth in range(1, local.folder_depth_limit + 1) :
+    depth => toset([
+      for path in local.assembly_folders : path
+      if length(split("/", path)) == depth
+    ])
+  }
+}
+
+resource "terraform_data" "folder_depth" {
+  for_each = local.assembly_folders
+
+  input = each.key
+
+  lifecycle {
+    precondition {
+      condition     = length(split("/", each.key)) <= local.folder_depth_limit
+      error_message = "assemblies/${each.key} is ${length(split("/", each.key))} folders deep. This configuration creates at most ${local.folder_depth_limit}."
+    }
+  }
 }
 
 resource "terraform_data" "assembly_include" {

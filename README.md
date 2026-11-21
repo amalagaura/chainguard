@@ -18,7 +18,7 @@ assemblies/<folder>/<child>/<name>.yaml
 | --- | --- | --- |
 | `<name>.yaml` directly in `assemblies/` | Image repo in the organization. No folder is created | `chainguard_image_repo.assembly["<name>"]` |
 | `<folder>/` | Folder under the organization | `chainguard_group.folder["<folder>"]` |
-| `<folder>/<child>/` | Folder under `<folder>` | `chainguard_group.folder["<folder>/<child>"]` |
+| `<folder>/<child>/` | Folder under `<folder>`. Each additional directory is the next depth, through depth 3 | `module.folder_2.chainguard_group.folder["<folder>/<child>"]` |
 | `<folder>/<name>.yaml` or `.yml`, at any depth | Image repo in the deepest folder. The repo, overlay, and binding share this key | `chainguard_image_repo.assembly["<folder>/<name>"]` |
 | `source` | Catalog image to sync. Set it in the file. Defaults to `<name>` | `sync_config.source` |
 | `description` | Repo description. Set it in the file. Defaults to a one-line note | `description` |
@@ -26,7 +26,7 @@ assemblies/<folder>/<child>/<name>.yaml
 | `overlay` | Custom Assembly manifest. When omitted, the rest of the file is the manifest. When that manifest is empty, no overlay or binding is created | `chainguard_image_overlay.config` |
 | `<name>` or `<folder>--<name>` | Overlay name. Overlays belong to the organization. A folder repo includes the folder path, with each `/` replaced by `--`, so the name stays unique | `chainguard_image_overlay.assembly["<name>"]` or `["<folder>/<name>"]` |
 
-The filename, without `.yaml` or `.yml`, is the repo name. Each folder segment and each repo name uses Chainguard's name rules: lowercase letters, digits, and hyphens. The Terraform key has no extension: `<name>` for a file in `assemblies/`, and the directory path plus `<name>` for a file in a directory. `platform/prod/api.yaml` is the key `platform/prod/api`, the overlay name `platform--prod--api`, and the repo name `api`. `name.yaml` and `name.yml` in the same directory are that same key, and the plan fails. The same repo name in different directories is allowed, because the parents differ.
+The filename, without `.yaml` or `.yml`, is the repo name. Each folder segment and each repo name uses Chainguard's name rules: lowercase letters, digits, and hyphens. The Terraform key has no extension: `<name>` for a file in `assemblies/`, and the directory path plus `<name>` for a file in a directory. `platform/prod/api.yaml` is the key `platform/prod/api`, the overlay name `platform--prod--api`, and the repo name `api`. A path may contain at most three folders. `name.yaml` and `name.yml` in the same directory are that same key, and the plan fails. The same repo name in different directories is allowed, because the parents differ.
 
 The pull reference printed by Terraform is `cgr.dev/<organization>/<name>`. It does not include the folder. The IAM parent is the organization for a file in `assemblies/`, and the folder for a file in a directory. Confirm the reference with `chainctl images repos list` after the first apply.
 
@@ -200,6 +200,7 @@ Deleting the YAML first makes apply fail. The image repo resource's delete is a 
 | `assemblies.tf` | Discovers YAML files and calls the assembly module |
 | `assembly_fragments/` | Shared manifest files listed by `include`. Not image repos |
 | `modules/assembly/` | Maps one YAML document to a repo name, tag selector, and overlay JSON |
+| `modules/folder/` | Creates the folders at depths 2 and 3 |
 | `tests/` | `terraform test -test-directory=tests`. Fixtures are inline and do not read `assemblies/` |
 | `main.tf` | Folder, repo, overlay, and binding |
 | `providers.tf` | Exchanges the OIDC token minted by `scripts/mint-jwt.sh` |
